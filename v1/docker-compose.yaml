@@ -1,0 +1,20 @@
+services:
+  db:
+    image: mariadb:11.0.2
+    restart: always
+    environment:
+      MARIADB_DATABASE: storage
+      MARIADB_MYSQL_LOCALHOST_USER: root
+      MARIADB_ROOT_PASSWORD: example
+    healthcheck:
+      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+      interval: 5s
+      timeout: 5s
+      retries: 100
+    ports:
+      - "3306:3306"
+    volumes:
+      - "db-data:/var/lib/mysql"
+
+volumes:
+  db-data:
