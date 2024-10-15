@@ -1,34 +1,72 @@
-import enum
+from __future__ import annotations
 
-from sqlalchemy import Column, INT, ForeignKey
+import enum
+from typing import Annotated
+
+from sqlalchemy import Column, INT, ForeignKey, CHAR
 from sqlalchemy.dialects.mysql import JSON
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, RelationshipProperty
 
 Base = declarative_base()
 
 
-class Tables(enum.StrEnum):
-    FUNCTIONS = "function_storage"
-    VALUES = "value_storage"
+class TableNames(enum.StrEnum):
+    FUNCTION_TARGETS_TABLE = "funtion_storage"
+    VALUES_TABLE = "value_storage"
 
 
-class DBFunction(Base):
-    __tablename__ = str(Tables.FUNCTIONS)
-    id = Column(INT, primary_key=True, nullable=False)
-    counter = Column(INT, nullable=False)
-    data = Column(JSON, nullable=False)
-    value_id = Column(INT, ForeignKey("value_storage.id"), nullable=False)
+id_str = Annotated[str, 36]
+ID_STR = CHAR(36)
+DICT = JSON
+
+
+class FunctionTargets(Base):
+    __tablename__ = TableNames.FUNCTION_TARGETS_TABLE
+
+    from_value_id: Column[id_str] = Column(
+        ID_STR,
+        ForeignKey(
+            f"{TableNames.VALUES_TABLE}.id",
+            ondelete="CASCADE",
+            onupdate="RESTRICT",
+        ),
+        primary_key=True,
+        nullable=False,
+    )
+    to_value_id: Column[id_str] = Column(
+        ID_STR,
+        ForeignKey(
+            f"{TableNames.VALUES_TABLE}.id",
+            ondelete="CASCADE",
+            onupdate="RESTRICT",
+        ),
+        primary_key=True,
+        nullable=False,
+    )
+    counter: Column[int] = Column(INT, server_default="0", nullable=False)
+
+    to_value: RelationshipProperty[DBValue] = relationship(
+        "DBValue",
+        foreign_keys="[FunctionTargets.to_value_id]",
+        viewonly=True,
+        uselist=False,
+        cascade="",
+        lazy="joined",
+    )
 
 
 class DBValue(Base):
-    __tablename__ = str(Tables.VALUES)
+    __tablename__ = TableNames.VALUES_TABLE
 
-    id = Column(INT, primary_key=True, nullable=False)
-    data = Column(JSON, nullable=False)
+    id: Column[id_str] = Column(ID_STR, primary_key=True, nullable=False)
+    data: Column[dict] = Column(DICT, nullable=False)
 
-    functions: list[DBFunction] = relationship(
-        DBFunction.__name__,
+    func_targets_from_me: RelationshipProperty[list[FunctionTargets]] = relationship(  # type: ignore[misc]
+        FunctionTargets.__name__,
         cascade="all, delete-orphan",
-        foreign_keys="[DBFunction.value_id]",
+        passive_deletes=True,
+        foreign_keys=[FunctionTargets.from_value_id],
+        order_by=FunctionTargets.counter,
+        lazy="selectin",
     )
